@@ -5,27 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>ACP事前問診｜あこプラ</title>
 
-<!--
-  =====================================================================
-  医療情報・情報システム部門の方へ（仕様書 16.2 関連）
-
-  本ファイルは単一HTMLファイルとして完結しており、外部CDN・外部フォント・
-  外部APIへの通信は一切行いません（仕様書 6.2 配置条件に準拠）。
-
-  以下のCSPは <meta> タグで設定できる範囲の暫定値です。本番運用では
-  仕様書 7.3 の推奨HTTPヘッダーを、可能な限りサーバー側のHTTPレスポンス
-  ヘッダーとして設定してください（<meta>では設定できないヘッダー：
-  X-Content-Type-Options, Permissions-Policy, 完全な Cache-Control 制御）。
-
-  また、より厳格な運用（'unsafe-inline' を排除したCSP）を行う場合は、
-  本ファイル内の <style> と <script> を外部ファイル（style.css / app.js /
-  qrcode-lib.js）に分割し、script-src / style-src を 'self' のみとした上で
-  サーバー側ヘッダーで配信してください。単一ファイルでの簡易配置を優先する
-  場合は、下記の 'unsafe-inline' を含むCSPのままでも、外部送信先が存在しない
-  ため実質的なリスクは限定的です（connect-src 'none' により、フォーム送信・
-  fetch・XHR等による外部通信そのものを禁止しています）。
-  =====================================================================
--->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'">
 <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -62,6 +41,37 @@
   --font-display: "Hiragino Mincho ProN", "Yu Mincho", YuMincho, "Noto Serif JP", serif;
   --font-body: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic Medium", "Yu Gothic", Meiryo, sans-serif;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ナイトモード（端末側のダークモード設定に自動追従）。
+   トークン（変数）を上書きするだけで、以下の全ルールがそのまま両モードに対応する。
+   ※QRコード表示部分（.qr-card）は、バーコードリーダーでの読み取り安定性のため
+   　白背景・黒モジュールを維持する必要があり、意図的にダークモードの対象外としている。 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1B1F1B;
+    --bg-elevated: #242923;
+    --ink: #ECEFEA;
+    --ink-muted: #B7BEB3;
+    --ink-faint: #93998F;
+    --forest: #3E7057;
+    --forest-deep: #8FC3A4;
+    --forest-tint: #243830;
+    --gold: #D9AA5F;
+    --gold-ink: #E4BA7D;
+    --gold-tint: #3A2F1C;
+    --line: #636E5D;
+    --line-strong: #78846F;
+    --caution-ink: #E8C989;
+    --caution-bg: #332A18;
+    --caution-line: #5C4A28;
+    --focus: #8FD4B5;
+    --shadow-soft: 0 2px 20px rgba(0, 0, 0, 0.45);
+  }
+  /* 白背景のQRカードは周囲が暗くなる分、輪郭がぼやけないよう縁取りを足す */
+  .qr-card {
+    box-shadow: var(--shadow-soft), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
 }
 
 * { box-sizing: border-box; }
@@ -338,7 +348,7 @@ p.q-sub, p.lead {
 }
 .btn-text {
   background: transparent;
-  color: var(--forest);
+  color: var(--forest-deep);
   padding: 15px 10px;
 }
 .btn-block { width: 100%; }
@@ -499,7 +509,7 @@ p.q-sub, p.lead {
 .disclosure summary {
   cursor: pointer;
   font-size: 14px;
-  color: var(--forest);
+  color: var(--forest-deep);
   list-style: none;
 }
 .disclosure summary::-webkit-details-marker { display: none; }
@@ -533,7 +543,7 @@ p.q-sub, p.lead {
   border-radius: 50%;
   background: var(--forest-tint);
   display: flex; align-items: center; justify-content: center;
-  color: var(--forest);
+  color: var(--forest-deep);
   font-size: 26px;
 }
 
@@ -554,8 +564,16 @@ p.q-sub, p.lead {
 footer.foot-note {
   text-align: center;
   font-size: 12px;
+  line-height: 1.7;
   color: var(--ink-faint);
-  padding: 4px 20px 18px;
+  padding: 16px 20px 4px;
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+}
+footer.foot-note .foot-note-license {
+  margin-top: 6px;
+  font-size: 11px;
+  opacity: 0.85;
 }
 
 .visually-hidden {
@@ -2878,9 +2896,8 @@ qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
 </script>
 <script>
 /* ACP事前問診 Webアプリ ロジック
-   仕様書「患者向けACP事前問診Webアプリ 仕様書 Ver.0.1」に基づく実装。
 
-   重要な設計方針（仕様書 3. 基本方針 / 7. セキュリティ・プライバシー要件 より）:
+   重要な設計方針:
    - 氏名・患者ID・生年月日・住所・電話番号等は一切入力させない。
    - 回答内容はサーバーへ送信しない（fetch / XHR / sendBeacon 等は本ファイル内で一切使用していない）。
    - 回答内容は database / Cookie / localStorage / sessionStorage / IndexedDB に保存しない
@@ -2920,7 +2937,7 @@ qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
 
   var CONTENT = {
 
-    // 回答者区分（8.2）。単一選択。
+    // 回答者区分。単一選択。
     respondentOptions: [
       { id: 'self', label: '本人' },
       { id: 'self_family', label: '本人と家族・大切な人が一緒に回答' },
@@ -2928,7 +2945,7 @@ qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
       { id: 'family_own', label: '家族等が、自分たちの希望として回答' }
     ],
 
-    // 設問本体（8.3〜8.8）。
+    // 設問本体。
     // - id: 内部管理用の設問ID（変更しないこと。経過記録文の生成順に影響）
     // - section: 経過記録文・確認画面での見出し
     // - title / sub: 画面に表示する設問文・補足文
@@ -3040,7 +3057,7 @@ qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
       }
     ],
 
-    // 経過記録文テンプレート（11章）。respondent の id ごとに定義。
+    // 経過記録文テンプレート。respondent の id ごとに定義。
     recordTemplates: {
       self: {
         respondentLabel: '本人',
@@ -3074,11 +3091,21 @@ qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
       }
     },
 
-    // 画面文言（8.1・8.2・9・10・7.4章など）
+    // 画面文言
     ui: {
       brandName: 'あこプラ',
       pageTitle: 'ACP事前問診｜あこプラ',
       nav: { back: '戻る', next: '次へ' },
+
+      // フッタ表示（開始画面に表示）。
+      // ※連絡先は仮の記載です。公開前に実際の連絡先へ差し替えてください。
+      footer: {
+        hospitalName: '公益財団法人宮城厚生協会　坂総合病院',
+        contact: 'お問い合わせ：坂総合病院倫理委員会（仮）　TEL：022-365-5175（代表電話）',
+        copyright: '© 2026 公益財団法人宮城厚生協会 坂総合病院',
+        qrLibraryNotice: '本アプリはQRコード生成に qrcode-generator（MIT License, Copyright (c) Kazuhiko Arase）を使用しています。'
+      },
+
       start: {
         titleHtml: 'これからの医療やケアについて<br>今の考えを整理しましょう',
         body: [
@@ -3242,7 +3269,7 @@ qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
     window.scrollTo(0, 0);
   }
 
-  // --- 経過記録用テキスト生成（仕様書 11章） ---
+  // --- 経過記録用テキスト生成 ---
 
   function buildSectionBlock(q) {
     var lines = [q.section + '：'];
@@ -3288,7 +3315,19 @@ qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
     return '<div class="komorebi-bg" aria-hidden="true"><span></span><span></span><span></span></div>';
   }
 
-  // --- 画面：開始画面（8.1） ---
+  function footerHtml() {
+    var f = UI.footer;
+    return (
+      '<footer class="foot-note">' +
+        '<div>' + esc(f.hospitalName) + '</div>' +
+        '<div>' + esc(f.contact) + '</div>' +
+        '<div>' + esc(f.copyright) + '</div>' +
+        '<div class="foot-note-license">' + esc(f.qrLibraryNotice) + '</div>' +
+      '</footer>'
+    );
+  }
+
+  // --- 画面：開始画面 ---
 
   function renderStart() {
     var bodyHtml = UI.start.body.map(function (t) { return '<p>' + esc(t) + '</p>'; }).join('');
@@ -3302,6 +3341,7 @@ qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
           '<div class="start-body">' + bodyHtml + '</div>' +
           '<div class="start-reassure">' + esc(UI.start.reassure) + '</div>' +
         '</div>' +
+        footerHtml() +
       '</main>' +
       '<div class="actionbar">' +
         '<button class="btn btn-primary btn-block" data-action="start">' + esc(UI.start.startButton) + '</button>' +
@@ -3309,7 +3349,7 @@ qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
     );
   }
 
-  // --- 画面：回答者区分選択（8.2） ---
+  // --- 画面：回答者区分選択 ---
 
   function renderRespondent() {
     var stepNum = 1;
@@ -3338,7 +3378,7 @@ qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
     );
   }
 
-  // --- 画面：各設問（8.3〜8.8） ---
+  // --- 画面：各設問 ---
 
   function renderQuestion(q, stepNum) {
     var selected = state.answers[q.id];
@@ -3384,7 +3424,7 @@ qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
     );
   }
 
-  // --- 画面：回答確認（9章） ---
+  // --- 画面：回答確認 ---
 
   function respondentLabel() {
     var f = RESPONDENT_OPTIONS.filter(function (o) { return o.id === state.respondent; })[0];
@@ -3431,7 +3471,7 @@ qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
     );
   }
 
-  // --- 画面：QRコード表示（10章・7.4） ---
+  // --- 画面：QRコード表示 ---
 
   function renderQrErased() {
     return (
